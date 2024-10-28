@@ -87,7 +87,7 @@ class IncidentClassifier(nn.Module):
     def __init__(self, num_classes):
         super(IncidentClassifier, self).__init__()
         # Use ResNet50 as the base model
-        self.model = models.resnet50(pretrained=True)
+        self.model = models.resnet50(weights='IMAGENET1K_V1')
         
         # Replace the final fully connected layer
         num_features = self.model.fc.in_features
