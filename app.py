@@ -167,7 +167,7 @@
 
 
 from flask import Flask, request, jsonify
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 import torch
 import torch.nn as nn
 from torchvision import transforms, models
@@ -201,7 +201,6 @@ class IncidentClassifier(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-# Load model function with error handling
 def load_model(model_path, num_classes):
     try:
         model = IncidentClassifier(num_classes)
@@ -226,10 +225,18 @@ class_names = [
     "Public Hygiene Issues"
 ]
 
-# Initialize Flask app with larger max content length
+# Initialize Flask app
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max-limit
-CORS(app)
+
+# Configure CORS
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # Initialize model globally
 try:
@@ -238,41 +245,59 @@ except Exception as e:
     logger.error(f"Failed to load model at startup: {str(e)}")
     model = None
 
-@app.route('/')
+@app.route('/', methods=['GET'])
+@cross_origin()
 def home():
     return "Welcome to the Incident Classifier API!"
 
-@app.route('/favicon.ico')
+@app.route('/favicon.ico', methods=['GET'])
+@cross_origin()
 def favicon():
     return '', 204
 
-@app.route('/health')
+@app.route('/health', methods=['GET'])
+@cross_origin()
 def health_check():
     return jsonify({
         'status': 'healthy',
         'model_loaded': model is not None
     })
 
-@app.route('/predict', methods=['POST'])
+@app.route('/predict', methods=['POST', 'OPTIONS'])
+@cross_origin()
 def predict():
+    # Handle preflight requests
+    if request.method == 'OPTIONS':
+        return '', 204
+    
     try:
+        logger.info("Received prediction request")
+        
+        # Log request headers for debugging
+        logger.info(f"Request Headers: {dict(request.headers)}")
+        logger.info(f"Request Method: {request.method}")
+        
         # Check if model is loaded
         if model is None:
+            logger.error("Model not initialized")
             return jsonify({'error': 'Model not initialized'}), 503
 
         # Check if file exists in request
         if 'image' not in request.files:
+            logger.error("No image file in request")
             return jsonify({'error': 'No image file provided'}), 400
 
         file = request.files['image']
         
         # Validate file
         if file.filename == '':
+            logger.error("Empty filename")
             return jsonify({'error': 'No selected file'}), 400
 
         # Read and validate image
         img_bytes = file.read()
         if not img_bytes:
+            logger.error("Empty file content")
             return jsonify({'error': 'Empty file'}), 400
 
         # Process image
@@ -308,11 +333,11 @@ def predict():
 
         except Exception as e:
             logger.error(f"Error during prediction: {str(e)}")
-            return jsonify({'error': 'Prediction failed'}), 500
+            return jsonify({'error': f'Prediction failed: {str(e)}'}), 500
 
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
