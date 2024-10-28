@@ -81,6 +81,7 @@ import torch.nn as nn  # Import nn module
 from torchvision import transforms, models  # Import models from torchvision
 from PIL import Image
 import io
+import os
 
 # Define the model
 class IncidentClassifier(nn.Module):
@@ -162,4 +163,4 @@ def predict():
         return jsonify({'class_index': class_index, 'class_name': class_name})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
